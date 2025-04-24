@@ -1,57 +1,64 @@
 import Phaser from 'phaser';
 
 export default class OfficeScene extends Phaser.Scene {
-  private player!: Phaser.Physics.Arcade.Sprite;
-  private npc!: Phaser.Physics.Arcade.Sprite;
+  private player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+  private npc!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
   private textBubble!: Phaser.GameObjects.Container;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private messageBubbleVisible = false;
+  private walls!: Phaser.Physics.Arcade.StaticGroup;
 
   constructor() {
     super('OfficeScene');
   }
 
   preload() {
-    // Load assets
-    this.load.image('tiles', '/assets/office_tileset.png');
-    this.load.tilemapTiledJSON('office-map', '/assets/office_map.json');
-    this.load.spritesheet('player', '/assets/character.png', { frameWidth: 32, frameHeight: 48 });
-    this.load.spritesheet('npc', '/assets/npc.png', { frameWidth: 32, frameHeight: 48 });
+    // We'll generate a simple texture for our player and NPC
+    this.createPlayerTexture();
+    this.createNpcTexture();
+  }
+
+  createPlayerTexture() {
+    // Create a canvas texture for the player (blue square)
+    const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+    graphics.fillStyle(0x0000ff); // Blue color
+    graphics.fillRect(0, 0, 30, 30);
+    graphics.generateTexture('playerTexture', 30, 30);
+  }
+
+  createNpcTexture() {
+    // Create a canvas texture for the NPC (red square)
+    const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+    graphics.fillStyle(0xff0000); // Red color
+    graphics.fillRect(0, 0, 30, 30);
+    graphics.generateTexture('npcTexture', 30, 30);
   }
 
   create() {
-    // Create the office map
-    const map = this.make.tilemap({ key: 'office-map' });
-    const tileset = map.addTilesetImage('office_tileset', 'tiles');
+    // Create a simple office layout using graphics
+    this.createOfficeLayout();
     
-    // Create layers
-    const floorLayer = map.createLayer('Floor', tileset, 0, 0);
-    const furnitureLayer = map.createLayer('Furniture', tileset, 0, 0);
-    
-    // Set collisions for furniture
-    furnitureLayer.setCollisionByProperty({ collides: true });
-    
-    // Create player
-    this.player = this.physics.add.sprite(100, 100, 'player');
+    // Create player using the generated texture
+    this.player = this.physics.add.sprite(100, 100, 'playerTexture');
     this.player.setCollideWorldBounds(true);
     
-    // Create NPC
-    this.npc = this.physics.add.sprite(250, 150, 'npc');
+    // Create NPC using the generated texture
+    this.npc = this.physics.add.sprite(250, 150, 'npcTexture');
     this.npc.setImmovable(true);
     
     // Set collisions
-    this.physics.add.collider(this.player, furnitureLayer);
+    this.physics.add.collider(this.player, this.walls);
     this.physics.add.collider(this.player, this.npc);
     
     // Create message bubble (initially hidden)
     this.textBubble = this.add.container(this.npc.x, this.npc.y - 50);
     const bubble = this.add.graphics();
     bubble.fillStyle(0xffffff, 0.8);
-    bubble.fillRoundedRect(0, 0, 140, 40, 10);
+    bubble.fillRoundedRect(-70, -25, 140, 50, 10);
     bubble.lineStyle(2, 0x000000, 1);
-    bubble.strokeRoundedRect(0, 0, 140, 40, 10);
+    bubble.strokeRoundedRect(-70, -25, 140, 50, 10);
     
-    const message = this.add.text(10, 10, "Hello there!", { 
+    const message = this.add.text(-60, -15, "Hello there!\nHow are you?", { 
       fontSize: '12px', 
       color: '#000000' 
     });
@@ -59,18 +66,22 @@ export default class OfficeScene extends Phaser.Scene {
     this.textBubble.add([bubble, message]);
     this.textBubble.setAlpha(0); // Initially hidden
     
-    // Setup player animations
-    this.createPlayerAnimations();
-    
     // Setup keyboard controls
     this.cursors = this.input.keyboard.createCursorKeys();
     
     // Enable world bounds
-    this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+    this.physics.world.setBounds(0, 0, 800, 600);
     
-    // Follow the player with the camera
-    this.cameras.main.startFollow(this.player);
-    this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+    // Set the background color to a light beige (office-like)
+    this.cameras.main.setBackgroundColor('#f5f5dc');
+    
+    // Add some instructions text
+    this.add.text(10, 10, 'Use arrow keys to move\nApproach the red NPC to see a message', {
+      fontSize: '16px',
+      color: '#000000',
+      backgroundColor: '#ffffff',
+      padding: { x: 5, y: 5 }
+    });
   }
   
   update() {
@@ -85,74 +96,92 @@ export default class OfficeScene extends Phaser.Scene {
       this.npc.x, this.npc.y
     );
     
-    // Show/hide message bubble based on distance
-    if (distance <= 48 && !this.messageBubbleVisible) { // 48 = approximately 1 tile radius
+    // Show/hide message bubble based on distance (48 pixels ≈ 1 tile radius)
+    if (distance <= 48 && !this.messageBubbleVisible) {
       this.showMessageBubble();
     } else if (distance > 48 && this.messageBubbleVisible) {
       this.hideMessageBubble();
     }
     
-    //position update alowwing text bubble to follow user
-    this.textBubble.setPosition(this.npc.x - 70, this.npc.y - 50);
+    // Update the position of the text bubble to follow the NPC
+    this.textBubble.setPosition(this.npc.x, this.npc.y - 50);
+  }
+  
+  private createOfficeLayout() {
+    // Create a static group for walls and furniture
+    this.walls = this.physics.add.staticGroup();
+    
+    // Create office boundaries (walls)
+    this.createWall(0, 0, 800, 20); // Top wall
+    this.createWall(0, 580, 800, 20); // Bottom wall
+    this.createWall(0, 0, 20, 600); // Left wall
+    this.createWall(780, 0, 20, 600); // Right wall
+    
+    // Create some office furniture (desks)
+    this.createDesk(100, 200, 150, 80);
+    this.createDesk(500, 200, 150, 80);
+    this.createDesk(100, 400, 150, 80);
+    this.createDesk(500, 400, 150, 80);
+    
+    // Create a meeting table in the center
+    this.createMeetingTable(350, 300, 100, 100);
+  }
+  
+  private createWall(x: number, y: number, width: number, height: number) {
+    const wall = this.add.rectangle(x, y, width, height, 0x888888);
+    wall.setOrigin(0, 0); // Set origin to top-left
+    this.walls.add(wall);
+  }
+  
+  private createDesk(x: number, y: number, width: number, height: number) {
+    // Add desk visuals (brown rectangle)
+    const desk = this.add.rectangle(x, y, width, height, 0x8B4513);
+    desk.setOrigin(0, 0);
+    
+    // Add desk to walls group for collision
+    this.walls.add(desk);
+    
+    // Add a chair (smaller green rectangle)
+    const chair = this.add.rectangle(x + width/2 - 15, y + height + 5, 30, 30, 0x006400);
+    chair.setOrigin(0, 0);
+  }
+  
+  private createMeetingTable(x: number, y: number, width: number, height: number) {
+    // Add meeting table visuals (gray oval)
+    const table = this.add.ellipse(x + width/2, y + height/2, width, height, 0x444444);
+    
+    // Convert to rectangle for collision purposes
+    const tableCollider = this.add.rectangle(x, y, width, height, 0x444444);
+    tableCollider.setOrigin(0, 0);
+    tableCollider.setAlpha(0); // Make it invisible
+    
+    // Add table to walls group for collision
+    this.walls.add(tableCollider);
   }
   
   private movePlayer() {
-    // resettting velocity 
+    // Reset velocity
     this.player.setVelocity(0);
     
-    //movement
+    // Handle movement
+    const speed = 160;
+    
     if (this.cursors.left.isDown) {
-      this.player.setVelocityX(-100);
-      this.player.anims.play('walk-left', true);
+      this.player.setVelocityX(-speed);
     } else if (this.cursors.right.isDown) {
-      this.player.setVelocityX(100);
-      this.player.anims.play('walk-right', true);
-    } else if (this.cursors.up.isDown) {
-      this.player.setVelocityY(-100);
-      this.player.anims.play('walk-up', true);
-    } else if (this.cursors.down.isDown) {
-      this.player.setVelocityY(100);
-      this.player.anims.play('walk-down', true);
-    } else {
-      // no animations if no keys are pressed 
-      this.player.anims.stop();
+      this.player.setVelocityX(speed);
     }
-  }
-  
-  private createPlayerAnimations() {
     
-    this.anims.create({ // player animations
-      key: 'walk-left',
-      frames: this.anims.generateFrameNumbers('player', { start: 3, end: 5 }),
-      frameRate: 10,
-      repeat: -1
-    });
-    
-    this.anims.create({
-      key: 'walk-right',
-      frames: this.anims.generateFrameNumbers('player', { start: 6, end: 8 }),
-      frameRate: 10,
-      repeat: -1
-    });
-    
-    this.anims.create({
-      key: 'walk-up',
-      frames: this.anims.generateFrameNumbers('player', { start: 9, end: 11 }),
-      frameRate: 10,
-      repeat: -1
-    });
-    
-    this.anims.create({
-      key: 'walk-down',
-      frames: this.anims.generateFrameNumbers('player', { start: 0, end: 2 }),
-      frameRate: 10,
-      repeat: -1
-    });
+    if (this.cursors.up.isDown) {
+      this.player.setVelocityY(-speed);
+    } else if (this.cursors.down.isDown) {
+      this.player.setVelocityY(speed);
+    }
   }
   
   private showMessageBubble() {
     this.messageBubbleVisible = true;
-    this.add.tween({
+    this.tweens.add({
       targets: this.textBubble,
       alpha: 1,
       duration: 200,
@@ -162,7 +191,7 @@ export default class OfficeScene extends Phaser.Scene {
   
   private hideMessageBubble() {
     this.messageBubbleVisible = false;
-    this.add.tween({
+    this.tweens.add({
       targets: this.textBubble,
       alpha: 0,
       duration: 200,

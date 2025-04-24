@@ -17,8 +17,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
-  },
-  pixelArt: true
+  }
 };
 
 export default class Game extends Phaser.Game {
