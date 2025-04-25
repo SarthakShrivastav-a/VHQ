@@ -6,13 +6,13 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-blue-600 text-white p-4">
-        <h1 className="text-xl font-bold">Phaser Office Simulation</h1>
+        <h1 className="text-xl font-bold">Pixel Art Office Simulation</h1>
       </header>
       <main className="flex-grow flex justify-center p-4">
         <OfficeGame />
       </main>
       <footer className="bg-gray-200 p-2 text-center text-sm">
-        <p>Created with React, TypeScript, Tailwind and Phaser.js</p>
+        <p>Created with React, TypeScript, Tailwind, Phaser.js and CraftPix Assets</p>
       </footer>
     </div>
   );
