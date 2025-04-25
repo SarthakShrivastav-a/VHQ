@@ -68,8 +68,11 @@ export default class OfficeScene extends Phaser.Scene {
   }
 
   create() {
-    // Add a background
-    this.add.image(400, 300, 'bg-1').setScale(2).setDepth(-1);
+    // Add a solid color background first
+    this.add.rectangle(400, 300, 800, 600, 0x87CEEB).setDepth(-2);
+    
+    // Add the pixel art background with transparency
+    this.add.image(400, 300, 'bg-1').setScale(3).setAlpha(0.4).setDepth(-1);
     
     // Create animations first so they're available
     this.createAnimations();
@@ -77,18 +80,18 @@ export default class OfficeScene extends Phaser.Scene {
     // Create walls and floor as individual sprites instead of using tilemap
     const walls = this.createEnvironment();
     
-    // Create player
-    this.player = this.physics.add.sprite(200, 200, 'player');
+    // Create player at a more central position
+    this.player = this.physics.add.sprite(400, 300, 'player');
     this.player.setCollideWorldBounds(true);
     this.player.setScale(1.5); // Scale up a bit
     
-    // Create NPC
-    this.npc = this.physics.add.sprite(400, 200, 'npc');
+    // Create NPC in a more visible position
+    this.npc = this.physics.add.sprite(300, 200, 'npc');
     this.npc.setImmovable(true);
     this.npc.setScale(1.5); // Scale up a bit
     
     // Create a second NPC character in a different area
-    const npc2 = this.physics.add.sprite(600, 400, 'npc2');
+    const npc2 = this.physics.add.sprite(500, 400, 'npc2');
     npc2.setImmovable(true);
     npc2.setScale(1.5);
     npc2.play('npc2-idle');
@@ -106,20 +109,22 @@ export default class OfficeScene extends Phaser.Scene {
     const coffeeMachine = this.physics.add.image(650, 200, 'coffee-machine');
     coffeeMachine.setImmovable(true);
     
-    // Add decorative flags (like for a company celebration)
+    // Add decorative flags (like for a company celebration) and set a larger scale
     const flag1 = this.physics.add.image(150, 150, 'flag');
     flag1.setImmovable(true);
+    flag1.setScale(0.8);
     
     const flag2 = this.physics.add.image(700, 500, 'flag');
     flag2.setImmovable(true);
+    flag2.setScale(0.8);
     
-    // Add some decorative gems as office supplies
-    this.add.image(300, 250, 'gem-1');
-    this.add.image(400, 350, 'gem-2');
-    this.add.image(500, 150, 'gem-3');
-    this.add.image(250, 400, 'gem-4');
-    this.add.image(550, 250, 'gem-5');
-    this.add.image(350, 500, 'gem-6');
+    // Add some decorative gems as office supplies with slightly larger scale
+    this.add.image(300, 250, 'gem-1').setScale(1.2);
+    this.add.image(400, 350, 'gem-2').setScale(1.2);
+    this.add.image(500, 150, 'gem-3').setScale(1.2);
+    this.add.image(250, 400, 'gem-4').setScale(1.2);
+    this.add.image(550, 250, 'gem-5').setScale(1.2);
+    this.add.image(350, 500, 'gem-6').setScale(1.2);
     
     // Set collisions
     this.physics.add.collider(this.player, walls);
@@ -155,7 +160,7 @@ export default class OfficeScene extends Phaser.Scene {
     // Camera settings
     this.cameras.main.setBounds(0, 0, 800, 600);
     this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
-    this.cameras.main.setZoom(1.5); // Zoom in a bit to see the details better
+    this.cameras.main.setZoom(1.2); // Slightly reduce zoom to see more of the environment
     
     // Instructions
     const instructions = this.add.text(10, 10, 'Use arrow keys to move\nApproach the NPC to see a message', {
@@ -203,6 +208,41 @@ export default class OfficeScene extends Phaser.Scene {
     const width = 800 / tileSize;
     const height = 600 / tileSize;
     
+    // First, create floor tiles across the entire map
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        // Add floor tiles everywhere
+        this.add.image(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 'floor');
+      }
+    }
+
+    // Add a special meeting area
+    const meetingAreaX = 10;
+    const meetingAreaY = 10;
+    const meetingAreaWidth = 5;
+    const meetingAreaHeight = 5;
+
+    // Add a blue carpet-like area for the meeting space (with gem patterns)
+    for (let x = meetingAreaX; x < meetingAreaX + meetingAreaWidth; x++) {
+      for (let y = meetingAreaY; y < meetingAreaY + meetingAreaHeight; y++) {
+        // Create a special blue rectangle for meeting area
+        const carpetRect = this.add.rectangle(
+          x * tileSize + tileSize/2, 
+          y * tileSize + tileSize/2, 
+          tileSize, 
+          tileSize, 
+          0x6688cc, 
+          0.5
+        );
+        
+        // Add a gem in the center of the meeting area
+        if (x === meetingAreaX + Math.floor(meetingAreaWidth/2) && 
+            y === meetingAreaY + Math.floor(meetingAreaHeight/2)) {
+          this.add.image(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 'gem-6').setScale(1.5);
+        }
+      }
+    }
+    
     // Create border walls
     for (let x = 0; x < width; x++) {
       for (let y = 0; y < height; y++) {
@@ -228,12 +268,21 @@ export default class OfficeScene extends Phaser.Scene {
     // Add some desks and chairs
     for (let x = 12; x < 28; x += 5) {
       for (let y = 4; y < 17; y += 4) {
+        // Add a gem next to each desk for decoration
+        this.add.image((x+1) * tileSize + tileSize/2, y * tileSize + tileSize/2, 'gem-' + (((x+y) % 6) + 1));
+        
         // Desk
         this.physics.add.staticImage(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 'desk');
         // Chair
         this.physics.add.staticImage(x * tileSize + tileSize/2, (y + 1) * tileSize + tileSize/2, 'chair');
       }
     }
+    
+    // Add more decoration with boxes in corners
+    this.physics.add.staticImage(3 * tileSize, 3 * tileSize, 'box-1');
+    this.physics.add.staticImage((width-3) * tileSize, 3 * tileSize, 'box-2');
+    this.physics.add.staticImage(3 * tileSize, (height-3) * tileSize, 'box-3');
+    this.physics.add.staticImage((width-3) * tileSize, (height-3) * tileSize, 'box-2');
     
     return walls;
   }
