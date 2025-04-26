@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import Game from '../PhaserGame';
 
 export default class OfficeScene extends Phaser.Scene {
   private player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
@@ -6,87 +7,38 @@ export default class OfficeScene extends Phaser.Scene {
   private textBubble!: Phaser.GameObjects.Container;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private messageBubbleVisible = false;
+  
+  // Task-related properties
+  private taskZones: Phaser.GameObjects.Zone[] = [];
+  private activeTaskZone: string | null = null;
 
   constructor() {
     super('OfficeScene');
   }
 
-  preload() {
-    // Load character assets from craftpix
-    this.load.spritesheet('player', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/1 Main Characters/1/Idle.png', {
-      frameWidth: 32,
-      frameHeight: 32
-    });
-    
-    this.load.spritesheet('player-run', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/1 Main Characters/1/Run.png', {
-      frameWidth: 32,
-      frameHeight: 32
-    });
-    
-    this.load.spritesheet('npc', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/1 Main Characters/2/Idle.png', {
-      frameWidth: 32,
-      frameHeight: 32
-    });
-    
-    // Additional character for variety
-    this.load.spritesheet('npc2', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/1 Main Characters/3/Idle.png', {
-      frameWidth: 32,
-      frameHeight: 32
-    });
-    
-    // Load simple tile images for walls instead of using a tilemap
-    this.load.image('wall', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/2 Locations/Tiles/Tile_42.png');
-    this.load.image('floor', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/2 Locations/Tiles/Tile_43.png');
-    this.load.image('table', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/2 Locations/Tiles/Tile_14.png');
-    this.load.image('desk', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/2 Locations/Tiles/Tile_12.png');
-    this.load.image('chair', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/2 Locations/Tiles/Tile_13.png');
-    
-    // Load furniture and objects
-    this.load.image('box-1', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Boxes/1_Idle.png');
-    this.load.image('box-2', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Boxes/2_Idle.png');
-    this.load.image('box-3', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Boxes/3_Idle.png');
-    
-    // Load gems as office items
-    this.load.image('gem-1', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Gems/1.png');
-    this.load.image('gem-2', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Gems/2.png');
-    this.load.image('gem-3', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Gems/3.png');
-    
-    // Load more gems for decoration
-    this.load.image('gem-4', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Gems/4.png');
-    this.load.image('gem-5', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Gems/5.png');
-    this.load.image('gem-6', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Gems/6.png');
-    
-    // Load checkpoint as water cooler or coffee machine
-    this.load.image('coffee-machine', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Checkpoints/Checkpoint_No_Flag.png');
-    
-    // Use an image instead of a spritesheet for the flag
-    this.load.image('flag', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/3 Objects/Checkpoints/Checkpoint_Flag_Idle1.png');
-    
-    // Load additional backgrounds
-    this.load.image('bg-1', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/2 Locations/Backgrounds/1.png');
-    this.load.image('bg-2', 'craftpix-net-396765-free-simple-platformer-game-kit-pixel-art/2 Locations/Backgrounds/2.png');
-  }
-
   create() {
+    const gameInstance = this.game as Game;
+    
     // Add a solid color background first
     this.add.rectangle(400, 300, 800, 600, 0x87CEEB).setDepth(-2);
     
     // Add the pixel art background with transparency
     this.add.image(400, 300, 'bg-1').setScale(3).setAlpha(0.4).setDepth(-1);
     
-    // Create animations first so they're available
+    // Create animations
     this.createAnimations();
     
     // Create walls and floor as individual sprites instead of using tilemap
     const walls = this.createEnvironment();
     
-    // Create player at a more central position
-    this.player = this.physics.add.sprite(400, 300, 'player');
+    // Create player at a more central position using the selected character
+    const selectedCharacter = gameInstance.gameData.selectedCharacter;
+    this.player = this.physics.add.sprite(400, 300, `${selectedCharacter}-idle`);
     this.player.setCollideWorldBounds(true);
     this.player.setScale(1.5); // Scale up a bit
     
-    // Create NPC in a more visible position
-    this.npc = this.physics.add.sprite(300, 200, 'npc');
+    // Create NPCs
+    this.npc = this.physics.add.sprite(300, 200, 'npc1');
     this.npc.setImmovable(true);
     this.npc.setScale(1.5); // Scale up a bit
     
@@ -126,6 +78,9 @@ export default class OfficeScene extends Phaser.Scene {
     this.add.image(550, 250, 'gem-5').setScale(1.2);
     this.add.image(350, 500, 'gem-6').setScale(1.2);
     
+    // Create task zones for completing game tasks
+    this.createTaskZones(gameInstance);
+    
     // Set collisions
     this.physics.add.collider(this.player, walls);
     this.physics.add.collider(this.player, this.npc);
@@ -137,6 +92,15 @@ export default class OfficeScene extends Phaser.Scene {
     this.physics.add.collider(this.player, flag1);
     this.physics.add.collider(this.player, flag2);
     
+    // Add task zone overlap
+    this.physics.add.overlap(
+      this.player, 
+      this.taskZones, 
+      this.handleTaskZoneOverlap as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, 
+      undefined, 
+      this
+    );
+    
     // Create message bubble (initially hidden)
     this.textBubble = this.add.container(this.npc.x, this.npc.y - 50);
     const bubble = this.add.graphics();
@@ -145,7 +109,7 @@ export default class OfficeScene extends Phaser.Scene {
     bubble.lineStyle(2, 0x000000, 1);
     bubble.strokeRoundedRect(-70, -25, 140, 50, 10);
     
-    const message = this.add.text(-60, -15, "Hey there!\nWelcome to the office!", { 
+    const message = this.add.text(-60, -15, `Hey ${gameInstance.gameData.playerName}!\nWelcome to the office!`, { 
       fontSize: '12px', 
       color: '#000000' 
     });
@@ -156,6 +120,9 @@ export default class OfficeScene extends Phaser.Scene {
     // Setup keyboard controls
     const keyboard = this.input.keyboard;
     this.cursors = keyboard ? keyboard.createCursorKeys() : undefined;
+    
+    // Add spacebar interaction for tasks
+    this.input.keyboard?.on('keydown-SPACE', this.handleTaskInteraction, this);
     
     // Camera settings
     this.cameras.main.setBounds(0, 0, 800, 600);
@@ -172,8 +139,8 @@ export default class OfficeScene extends Phaser.Scene {
     instructions.setScrollFactor(0); // Fix to camera
     
     // Play animations for the player and NPC
-    this.player.play('player-idle');
-    this.npc.play('npc-idle');
+    this.player.play(`${selectedCharacter}-idle`);
+    this.npc.play('npc1-idle');
   }
   
   update() {
@@ -197,6 +164,9 @@ export default class OfficeScene extends Phaser.Scene {
     
     // Update the position of the text bubble to follow the NPC
     this.textBubble.setPosition(this.npc.x, this.npc.y - 40);
+    
+    // Show task interaction hint if player is in a task zone
+    this.updateTaskInteractionHint();
   }
   
   private createEnvironment() {
@@ -287,31 +257,200 @@ export default class OfficeScene extends Phaser.Scene {
     return walls;
   }
   
-  private createAnimations() {
-    // Player animations
-    this.anims.create({
-      key: 'player-idle',
-      frames: this.anims.generateFrameNumbers('player', { start: 0, end: 3 }),
-      frameRate: 10,
-      repeat: -1
+  private createTaskZones(gameInstance: Game) {
+    // Create zones for each task
+    const tileSize = 32;
+    
+    // Task 1: Check email (at a desk)
+    const emailTask = this.add.zone(12 * tileSize + tileSize/2, 4 * tileSize + tileSize/2, 64, 64);
+    emailTask.setData('taskId', '1');
+    this.physics.world.enable(emailTask);
+    this.taskZones.push(emailTask);
+    
+    // Task 2: Attend meeting (in meeting room)
+    const meetingTask = this.add.zone(5 * tileSize + tileSize/2, 4 * tileSize + tileSize/2, 64, 64);
+    meetingTask.setData('taskId', '2');
+    this.physics.world.enable(meetingTask);
+    this.taskZones.push(meetingTask);
+    
+    // Task 3: Meet with colleagues (near NPC)
+    const colleagueTask = this.add.zone(400, 200, 64, 64);
+    colleagueTask.setData('taskId', '3');
+    this.physics.world.enable(colleagueTask);
+    this.taskZones.push(colleagueTask);
+    
+    // Visualize the task zones with markers
+    this.taskZones.forEach(zone => {
+      const taskId = zone.getData('taskId');
+      const task = gameInstance.gameData.tasks.find(t => t.id === taskId);
+      
+      // Add a subtle marker for each task
+      const color = task?.completed ? 0x55aa55 : 0xffff00;
+      const marker = this.add.circle(zone.x, zone.y, 8, color, 0.5);
+      
+      // Add a pulsing effect to active task markers
+      if (!task?.completed) {
+        this.tweens.add({
+          targets: marker,
+          alpha: 0.8,
+          duration: 1000,
+          yoyo: true,
+          repeat: -1
+        });
+      }
+    });
+  }
+  
+  private handleTaskZoneOverlap(player: Phaser.GameObjects.GameObject, zone: Phaser.GameObjects.Zone) {
+    this.activeTaskZone = zone.getData('taskId');
+  }
+  
+  private updateTaskInteractionHint() {
+    // Remove any existing hint
+    const existingHint = this.children.getByName('task-hint');
+    if (existingHint) {
+      existingHint.destroy();
+    }
+    
+    // If player is in a task zone, show a hint
+    if (this.activeTaskZone) {
+      const gameInstance = this.game as Game;
+      const task = gameInstance.gameData.tasks.find(t => t.id === this.activeTaskZone);
+      
+      if (task && !task.completed) {
+        const hint = this.add.text(
+          this.player.x, 
+          this.player.y - 40, 
+          '[SPACE] to ' + task.text, 
+          {
+            fontSize: '12px',
+            backgroundColor: '#00000080',
+            padding: { x: 5, y: 2 },
+            color: '#ffffff'
+          }
+        ).setOrigin(0.5).setName('task-hint');
+      }
+    }
+    
+    // Reset active zone (will be set again on next overlap if player still in zone)
+    this.activeTaskZone = null;
+  }
+  
+  private handleTaskInteraction() {
+    if (!this.activeTaskZone) return;
+    
+    const gameInstance = this.game as Game;
+    const task = gameInstance.gameData.tasks.find(t => t.id === this.activeTaskZone);
+    
+    if (task && !task.completed) {
+      // Mark task as completed
+      task.completed = true;
+      
+      // Visual feedback
+      this.cameras.main.flash(500, 0, 255, 0);
+      
+      // Play sound (would add sound effect here)
+      
+      // Update the UI scene
+      this.scene.get('UIScene').events.emit('updateTasks');
+      
+      // Show completion message
+      const completionText = this.add.text(
+        this.player.x, 
+        this.player.y - 60, 
+        'Task completed!', 
+        {
+          fontSize: '16px',
+          fontStyle: 'bold',
+          color: '#55ff55',
+          stroke: '#000000',
+          strokeThickness: 4
+        }
+      ).setOrigin(0.5);
+      
+      // Animate and remove the completion message
+      this.tweens.add({
+        targets: completionText,
+        y: completionText.y - 50,
+        alpha: 0,
+        duration: 2000,
+        onComplete: () => completionText.destroy()
+      });
+      
+      // Check if all tasks are completed
+      const allTasksCompleted = gameInstance.gameData.tasks.every(t => t.completed);
+      if (allTasksCompleted) {
+        this.showGameComplete();
+      }
+    }
+  }
+  
+  private showGameComplete() {
+    // Create a completion overlay
+    const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
+    overlay.setDepth(100);
+    
+    const completionText = this.add.text(
+      400, 
+      250, 
+      'CONGRATULATIONS!\nYou completed all office tasks!', 
+      {
+        fontSize: '32px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+        align: 'center'
+      }
+    ).setOrigin(0.5).setDepth(101);
+    
+    const continueText = this.add.text(
+      400, 
+      350, 
+      'Press SPACE to continue exploring\nor ESC to return to character selection', 
+      {
+        fontSize: '16px',
+        color: '#ffffff',
+        align: 'center'
+      }
+    ).setOrigin(0.5).setDepth(101);
+    
+    // Add input handlers
+    this.input.keyboard?.once('keydown-SPACE', () => {
+      overlay.destroy();
+      completionText.destroy();
+      continueText.destroy();
     });
     
-    this.anims.create({
-      key: 'player-walk',
-      frames: this.anims.generateFrameNumbers('player-run', { start: 0, end: 5 }),
-      frameRate: 10,
-      repeat: -1
+    this.input.keyboard?.once('keydown-ESC', () => {
+      this.scene.start('CharacterSelectScene');
+    });
+  }
+  
+  private createAnimations() {
+    // Player animations for each character
+    ['character1', 'character2', 'character3'].forEach(character => {
+      this.anims.create({
+        key: `${character}-idle`,
+        frames: this.anims.generateFrameNumbers(`${character}-idle`, { start: 0, end: 3 }),
+        frameRate: 10,
+        repeat: -1
+      });
+      
+      this.anims.create({
+        key: `${character}-walk`,
+        frames: this.anims.generateFrameNumbers(`${character}-run`, { start: 0, end: 5 }),
+        frameRate: 10,
+        repeat: -1
+      });
     });
     
     // NPC animations
     this.anims.create({
-      key: 'npc-idle',
-      frames: this.anims.generateFrameNumbers('npc', { start: 0, end: 3 }),
+      key: 'npc1-idle',
+      frames: this.anims.generateFrameNumbers('npc1', { start: 0, end: 3 }),
       frameRate: 10,
       repeat: -1
     });
     
-    // NPC2 animations
     this.anims.create({
       key: 'npc2-idle',
       frames: this.anims.generateFrameNumbers('npc2', { start: 0, end: 3 }),
@@ -323,6 +462,10 @@ export default class OfficeScene extends Phaser.Scene {
   private movePlayer() {
     // Early return if player or cursors are not defined
     if (!this.player || !this.cursors) return;
+    
+    // Get the selected character
+    const gameInstance = this.game as Game;
+    const selectedCharacter = gameInstance.gameData.selectedCharacter;
     
     // Reset velocity
     this.player.setVelocity(0);
@@ -350,9 +493,9 @@ export default class OfficeScene extends Phaser.Scene {
     
     // Play appropriate animation
     if (isMoving) {
-      this.player.play('player-walk', true);
+      this.player.play(`${selectedCharacter}-walk`, true);
     } else {
-      this.player.play('player-idle', true);
+      this.player.play(`${selectedCharacter}-idle`, true);
     }
   }
   
