@@ -33,11 +33,13 @@ const OfficeGame: React.FC = () => {
         />
       </div>
       <div className="mt-4 p-4 bg-gray-100 rounded max-w-lg">
-        <h2 className="text-lg font-semibold mb-2">Controls:</h2>
+        <h2 className="text-lg font-semibold mb-2">Game Features:</h2>
         <ul className="list-disc pl-6">
-          <li>Use Arrow Keys to move your character</li>
-          <li>Move close to the NPC to trigger a message</li>
-          <li>Explore the virtual office environment</li>
+          <li>Choose from three unique office characters</li>
+          <li>Complete office tasks to progress</li>
+          <li>Interact with coworkers and office equipment</li>
+          <li>Customize your experience with the settings panel</li>
+          <li>Explore the vibrant pixel art office environment</li>
         </ul>
       </div>
     </div>
