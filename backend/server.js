@@ -8,20 +8,25 @@ const server = http.createServer(app);
 
 // Environment variables
 const PORT = process.env.PORT || 3001;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
+// Allow multiple frontend URLs for development
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5174'
+];
 const COMMUNICATION_RANGE = process.env.COMMUNICATION_RANGE ? parseInt(process.env.COMMUNICATION_RANGE, 10) : 200;
 
 // Create Socket.IO server with CORS config
 const io = new Server(server, {
   cors: {
-    origin: FRONTEND_URL,
+    origin: ALLOWED_ORIGINS,
     methods: ["GET", "POST"]
   }
 });
 
 // Middleware
 app.use(cors({
-  origin: FRONTEND_URL
+  origin: ALLOWED_ORIGINS
 }));
 app.use(express.json());
 
