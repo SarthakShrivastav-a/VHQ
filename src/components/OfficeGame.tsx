@@ -6,17 +6,43 @@ const OfficeGame: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    console.log('OfficeGame component mounted');
+    console.log('Container ref exists:', !!containerRef.current);
+    
     if (containerRef.current && !gameRef.current) {
-      gameRef.current = new Game({
-        ...gameConfig,
-        parent: containerRef.current
-      });
+      try {
+        console.log('Attempting to create Phaser game with config:', gameConfig);
+        
+        // Add debug event listeners
+        const debugGame = () => {
+          window.addEventListener('phaser-created', () => console.log('Phaser game created event'));
+          window.addEventListener('phaser-boot', () => console.log('Boot scene started'));
+          window.addEventListener('phaser-character-select', () => console.log('Character select scene started'));
+          window.addEventListener('phaser-office', () => console.log('Office scene started'));
+        };
+        debugGame();
+        
+        gameRef.current = new Game({
+          ...gameConfig,
+          parent: containerRef.current
+        });
+        
+        console.log('Phaser game created successfully:', gameRef.current);
+      } catch (error) {
+        console.error('Error creating Phaser game:', error);
+      }
     }
 
     return () => {
+      console.log('OfficeGame component unmounting, cleaning up game instance');
       if (gameRef.current) {
-        gameRef.current.destroy(true);
-        gameRef.current = null;
+        try {
+          gameRef.current.destroy(true);
+          console.log('Phaser game destroyed successfully');
+          gameRef.current = null;
+        } catch (error) {
+          console.error('Error destroying Phaser game:', error);
+        }
       }
     };
   }, []);

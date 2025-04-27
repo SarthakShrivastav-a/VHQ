@@ -26,9 +26,16 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
   constructor() {
     super('CharacterSelectScene');
+    console.log('CharacterSelectScene constructor called');
+  }
+
+  init() {
+    console.log('CharacterSelectScene init called');
   }
 
   create() {
+    console.log('CharacterSelectScene create started');
+    
     // Background
     this.add.rectangle(400, 300, 800, 600, 0x000000).setAlpha(0.7);
     
@@ -47,109 +54,130 @@ export default class CharacterSelectScene extends Phaser.Scene {
     
     // Create start button
     this.createStartButton();
+    
+    console.log('CharacterSelectScene create completed');
   }
 
   private createCharacterSelectionUI() {
-    const startX = 200;
-    const characterSpacing = 200;
-    const characterY = 300;
-    
-    // Create character options
-    this.characters.forEach((character, index) => {
-      const x = startX + (index * characterSpacing);
-      const characterContainer = this.add.container(x, characterY);
+    console.log('Creating character selection UI');
+    try {
+      const startX = 200;
+      const characterSpacing = 200;
+      const characterY = 300;
       
-      // Character preview sprite
-      const sprite = this.add.sprite(0, -40, `${character.id}-preview`);
-      sprite.setScale(3);
+      // Create character options
+      this.characters.forEach((character, index) => {
+        const x = startX + (index * characterSpacing);
+        const characterContainer = this.add.container(x, characterY);
+        
+        // Character preview sprite
+        const sprite = this.add.sprite(0, -40, `${character.id}-preview`);
+        sprite.setScale(3);
+        
+        // Animation frame
+        const frame = this.add.rectangle(0, -40, 100, 100, 0x333333);
+        frame.setStrokeStyle(2, 0xffffff);
+        
+        // Name
+        const nameText = this.add.text(0, 30, character.name, {
+          fontFamily: 'Arial',
+          fontSize: '18px',
+          color: '#ffffff'
+        }).setOrigin(0.5);
+        
+        // Description
+        const descText = this.add.text(0, 60, character.description, {
+          fontFamily: 'Arial',
+          fontSize: '12px',
+          color: '#cccccc',
+          wordWrap: { width: 180 }
+        }).setOrigin(0.5);
+        
+        // Selection indicator
+        const selectionIndicator = this.add.rectangle(0, 100, 180, 180, 0xffff00, 0);
+        selectionIndicator.setStrokeStyle(2, 0xffff00);
+        
+        // Add to container
+        characterContainer.add([frame, sprite, nameText, descText, selectionIndicator]);
+        
+        // Selection functionality
+        sprite.setInteractive();
+        sprite.on('pointerdown', () => {
+          this.selectCharacter(character.id);
+        });
+        
+        // Store reference to selection indicator
+        this.characterSprites.push(sprite);
+        
+        // Initial selection
+        if (character.id === this.selectedCharacter) {
+          selectionIndicator.setFillStyle(0xffff00, 0.3);
+        }
+      });
+      console.log('Character selection UI created successfully');
+    } catch (error) {
+      console.error('Error creating character selection UI:', error);
+    }
+  }
+
+  private createPlayerNameInput() {
+    console.log('Creating player name input');
+    try {
+      // Create input element for player name
+      const nameInputHTML = `
+        <div style="background-color: #333333; padding: 10px; border-radius: 5px; width: 300px; text-align: center;">
+          <label for="playerName" style="color: white; display: block; margin-bottom: 5px;">Enter Your Name:</label>
+          <input type="text" id="playerName" name="playerName" value="Employee" 
+                 style="width: 90%; padding: 8px; border-radius: 3px; border: none; background-color: #555555; color: white;">
+        </div>
+      `;
       
-      // Animation frame
-      const frame = this.add.rectangle(0, -40, 100, 100, 0x333333);
-      frame.setStrokeStyle(2, 0xffffff);
+      this.nameInput = this.add.dom(400, 450).createFromHTML(nameInputHTML);
+      console.log('Player name input created successfully:', this.nameInput);
+    } catch (error) {
+      console.error('Error creating player name input:', error);
+    }
+  }
+
+  private createStartButton() {
+    console.log('Creating start button');
+    try {
+      // Create start button
+      const startButton = this.add.rectangle(400, 520, 200, 50, 0x33cc33);
+      startButton.setInteractive();
       
-      // Name
-      const nameText = this.add.text(0, 30, character.name, {
+      // Add text
+      const startText = this.add.text(400, 520, 'START GAME', {
         fontFamily: 'Arial',
         fontSize: '18px',
         color: '#ffffff'
       }).setOrigin(0.5);
       
-      // Description
-      const descText = this.add.text(0, 60, character.description, {
-        fontFamily: 'Arial',
-        fontSize: '12px',
-        color: '#cccccc',
-        wordWrap: { width: 180 }
-      }).setOrigin(0.5);
-      
-      // Selection indicator
-      const selectionIndicator = this.add.rectangle(0, 100, 180, 180, 0xffff00, 0);
-      selectionIndicator.setStrokeStyle(2, 0xffff00);
-      
-      // Add to container
-      characterContainer.add([frame, sprite, nameText, descText, selectionIndicator]);
-      
-      // Selection functionality
-      sprite.setInteractive();
-      sprite.on('pointerdown', () => {
-        this.selectCharacter(character.id);
+      // Hover effect
+      startButton.on('pointerover', () => {
+        startButton.setFillStyle(0x44dd44);
       });
       
-      // Store reference to selection indicator
-      this.characterSprites.push(sprite);
+      startButton.on('pointerout', () => {
+        startButton.setFillStyle(0x33cc33);
+      });
       
-      // Initial selection
-      if (character.id === this.selectedCharacter) {
-        selectionIndicator.setFillStyle(0xffff00, 0.3);
-      }
-    });
-  }
-
-  private createPlayerNameInput() {
-    // Create input element for player name
-    const nameInputHTML = `
-      <div style="background-color: #333333; padding: 10px; border-radius: 5px; width: 300px; text-align: center;">
-        <label for="playerName" style="color: white; display: block; margin-bottom: 5px;">Enter Your Name:</label>
-        <input type="text" id="playerName" name="playerName" value="Employee" 
-               style="width: 90%; padding: 8px; border-radius: 3px; border: none; background-color: #555555; color: white;">
-      </div>
-    `;
-    
-    this.nameInput = this.add.dom(400, 450).createFromHTML(nameInputHTML);
-  }
-
-  private createStartButton() {
-    // Create start button
-    const startButton = this.add.rectangle(400, 520, 200, 50, 0x33cc33);
-    startButton.setInteractive();
-    
-    // Add text
-    const startText = this.add.text(400, 520, 'START GAME', {
-      fontFamily: 'Arial',
-      fontSize: '18px',
-      color: '#ffffff'
-    }).setOrigin(0.5);
-    
-    // Hover effect
-    startButton.on('pointerover', () => {
-      startButton.setFillStyle(0x44dd44);
-    });
-    
-    startButton.on('pointerout', () => {
-      startButton.setFillStyle(0x33cc33);
-    });
-    
-    // Click effect
-    startButton.on('pointerdown', () => {
-      startButton.setFillStyle(0x228822);
-    });
-    
-    startButton.on('pointerup', () => {
-      this.startGame();
-    });
+      // Click effect
+      startButton.on('pointerdown', () => {
+        startButton.setFillStyle(0x228822);
+      });
+      
+      startButton.on('pointerup', () => {
+        this.startGame();
+      });
+      console.log('Start button created successfully');
+    } catch (error) {
+      console.error('Error creating start button:', error);
+    }
   }
 
   private selectCharacter(characterId: string) {
+    console.log(`Selecting character: ${characterId}`);
     this.selectedCharacter = characterId;
     
     // Update selection indicators
@@ -168,20 +196,34 @@ export default class CharacterSelectScene extends Phaser.Scene {
   }
 
   private startGame() {
-    // Get player name from input
-    const playerName = this.nameInput ? 
-      (document.getElementById('playerName') as HTMLInputElement)?.value || 'Employee' : 
-      'Employee';
-    
-    // Save selection to game data
-    const gameInstance = this.game as Game;
-    gameInstance.gameData.selectedCharacter = this.selectedCharacter;
-    gameInstance.gameData.playerName = playerName;
-    
-    // Start the game
-    this.scene.start('OfficeScene');
-    
-    // Start the UI scene as an overlay
-    this.scene.launch('UIScene');
+    console.log('Starting game...');
+    try {
+      // Get player name from input
+      const playerName = this.nameInput ? 
+        (document.getElementById('playerName') as HTMLInputElement)?.value || 'Employee' : 
+        'Employee';
+      
+      console.log(`Player name: ${playerName}, Selected character: ${this.selectedCharacter}`);
+      
+      // Save selection to game data
+      const gameInstance = this.game as Game;
+      gameInstance.gameData.selectedCharacter = this.selectedCharacter;
+      gameInstance.gameData.playerName = playerName;
+      
+      console.log('Game data updated:', gameInstance.gameData);
+      
+      // Dispatch custom event for debugging
+      window.dispatchEvent(new Event('phaser-office'));
+      
+      // Start the game
+      this.scene.start('OfficeScene');
+      
+      // Start the UI scene as an overlay
+      this.scene.launch('UIScene');
+      
+      console.log('Started OfficeScene and UIScene');
+    } catch (error) {
+      console.error('Error starting game:', error);
+    }
   }
 } 
