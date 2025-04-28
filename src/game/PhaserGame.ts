@@ -4,6 +4,8 @@ import BootScene from './scenes/BootScene';
 import CharacterSelectScene from './scenes/CharacterSelectScene';
 import UIScene from './scenes/UIScene';
 
+console.log('PhaserGame module loaded');
+
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game-container',
@@ -27,6 +29,8 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   pixelArt: true
 };
 
+console.log('Phaser game config initialized:', gameConfig);
+
 export interface GameData {
   selectedCharacter: string;
   playerName: string;
@@ -44,11 +48,33 @@ export const defaultGameData: GameData = {
   ]
 };
 
+console.log('Default game data initialized:', defaultGameData);
+
 export default class Game extends Phaser.Game {
   public gameData: GameData;
 
   constructor(config: Phaser.Types.Core.GameConfig) {
-    super(config);
-    this.gameData = {...defaultGameData};
+    console.log('Initializing Phaser Game with config:', config);
+    try {
+      super(config);
+      console.log('Phaser Game initialized successfully');
+      this.gameData = {...defaultGameData};
+      console.log('Game data initialized:', this.gameData);
+      
+      // Dispatch custom event for debugging
+      window.dispatchEvent(new Event('phaser-created'));
+      
+      // Add listeners for important Phaser events
+      this.events.on('ready', () => console.log('Phaser game ready event fired'));
+      this.events.on('blur', () => console.log('Phaser game blur event fired'));
+      this.events.on('focus', () => console.log('Phaser game focus event fired'));
+      this.events.on('hidden', () => console.log('Phaser game hidden event fired'));
+      this.events.on('visible', () => console.log('Phaser game visible event fired'));
+      this.events.on('resize', (width: number, height: number) => 
+        console.log(`Phaser game resize event fired: ${width}x${height}`));
+    } catch (error) {
+      console.error('Error initializing Phaser Game:', error);
+      throw error;
+    }
   }
 }

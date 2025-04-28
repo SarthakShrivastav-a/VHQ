@@ -1,521 +1,430 @@
 import Phaser from 'phaser';
 import Game from '../PhaserGame';
+import { io, Socket } from 'socket.io-client';
+
+interface User {
+  id: string;
+  name: string;
+  position: { x: number; y: number };
+  avatar: string;
+}
 
 export default class OfficeScene extends Phaser.Scene {
   private player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
-  private npc!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
-  private textBubble!: Phaser.GameObjects.Container;
+  private otherPlayers: Map<string, Phaser.Types.Physics.Arcade.SpriteWithDynamicBody> = new Map();
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
-  private messageBubbleVisible = false;
+  private socket: Socket | null = null;
+  private playerNameText?: Phaser.GameObjects.Text;
+  private proximityRadius: number = 250; // Increased from 200 to make it easier to detect nearby players
+  private lastNearbyCheck: number = 0;
+  private nearbyCheckInterval: number = 200; // Reduced from 300 for even more frequent checks
   
-  // Task-related properties
-  private taskZones: Phaser.GameObjects.Zone[] = [];
-  private activeTaskZone: string | null = null;
-
   constructor() {
     super('OfficeScene');
+    console.log('OfficeScene constructor called');
+  }
+
+  init() {
+    console.log('OfficeScene init called');
+    // Initialize socket connection
+    this.socket = io('http://localhost:3001');
+    this.setupSocketListeners();
+  }
+
+  setupSocketListeners() {
+    if (!this.socket) return;
+    
+    console.log('Setting up socket listeners');
+    
+    // Connection status events
+    this.socket.on('connect', () => {
+      console.log('Connected to server');
+      this.events.emit('connectionStatus', true);
+    });
+    
+    this.socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      this.events.emit('connectionStatus', false);
+    });
+    
+    // Listen for new players joining
+    this.socket.on('user-joined', (userData: User) => {
+      console.log('User joined:', userData);
+      this.addOtherPlayer(userData);
+      this.updatePlayerCount();
+      // Force a proximity check when a new player joins
+      this.checkNearbyPlayers();
+    });
+    
+    // Listen for players leaving
+    this.socket.on('user-left', (userId: string) => {
+      console.log('User left:', userId);
+      this.removePlayer(userId);
+      this.updatePlayerCount();
+      // Force a proximity check when a player leaves
+      this.checkNearbyPlayers();
+    });
+    
+    // Listen for player movements
+    this.socket.on('user-moved', (userData: any) => {
+      this.updatePlayerPosition(userData);
+      // We'll check proximity in updatePlayerPosition instead of here
+    });
+    
+    // Get current players
+    this.socket.on('users', (users: User[]) => {
+      console.log('Received users list:', users);
+      users.forEach(user => {
+        if (user.id !== this.socket?.id) {
+          this.addOtherPlayer(user);
+        }
+      });
+      this.updatePlayerCount();
+      // Force a proximity check when we get the initial user list
+      this.checkNearbyPlayers();
+    });
   }
 
   create() {
-    const gameInstance = this.game as Game;
+    console.log('OfficeScene create started');
     
-    // Add a solid color background first
-    this.add.rectangle(400, 300, 800, 600, 0x87CEEB).setDepth(-2);
-    
-    // Add the pixel art background with transparency
-    this.add.image(400, 300, 'bg-1').setScale(3).setAlpha(0.4).setDepth(-1);
-    
-    // Create animations
-    this.createAnimations();
-    
-    // Create walls and floor as individual sprites instead of using tilemap
-    const walls = this.createEnvironment();
-    
-    // Create player at a more central position using the selected character
-    const selectedCharacter = gameInstance.gameData.selectedCharacter;
-    this.player = this.physics.add.sprite(400, 300, `${selectedCharacter}-idle`);
-    this.player.setCollideWorldBounds(true);
-    this.player.setScale(1.5); // Scale up a bit
-    
-    // Create NPCs
-    this.npc = this.physics.add.sprite(300, 200, 'npc1');
-    this.npc.setImmovable(true);
-    this.npc.setScale(1.5); // Scale up a bit
-    
-    // Create a second NPC character in a different area
-    const npc2 = this.physics.add.sprite(500, 400, 'npc2');
-    npc2.setImmovable(true);
-    npc2.setScale(1.5);
-    npc2.play('npc2-idle');
-    
-    // Add some decorative objects
-    const box1 = this.physics.add.image(300, 150, 'box-1');
-    box1.setImmovable(true);
-    
-    const box2 = this.physics.add.image(500, 350, 'box-2');
-    box2.setImmovable(true);
-    
-    const box3 = this.physics.add.image(150, 450, 'box-3');
-    box3.setImmovable(true);
-    
-    const coffeeMachine = this.physics.add.image(650, 200, 'coffee-machine');
-    coffeeMachine.setImmovable(true);
-    
-    // Add decorative flags (like for a company celebration) and set a larger scale
-    const flag1 = this.physics.add.image(150, 150, 'flag');
-    flag1.setImmovable(true);
-    flag1.setScale(0.8);
-    
-    const flag2 = this.physics.add.image(700, 500, 'flag');
-    flag2.setImmovable(true);
-    flag2.setScale(0.8);
-    
-    // Add some decorative gems as office supplies with slightly larger scale
-    this.add.image(300, 250, 'gem-1').setScale(1.2);
-    this.add.image(400, 350, 'gem-2').setScale(1.2);
-    this.add.image(500, 150, 'gem-3').setScale(1.2);
-    this.add.image(250, 400, 'gem-4').setScale(1.2);
-    this.add.image(550, 250, 'gem-5').setScale(1.2);
-    this.add.image(350, 500, 'gem-6').setScale(1.2);
-    
-    // Create task zones for completing game tasks
-    this.createTaskZones(gameInstance);
-    
-    // Set collisions
-    this.physics.add.collider(this.player, walls);
-    this.physics.add.collider(this.player, this.npc);
-    this.physics.add.collider(this.player, npc2);
-    this.physics.add.collider(this.player, box1);
-    this.physics.add.collider(this.player, box2);
-    this.physics.add.collider(this.player, box3);
-    this.physics.add.collider(this.player, coffeeMachine);
-    this.physics.add.collider(this.player, flag1);
-    this.physics.add.collider(this.player, flag2);
-    
-    // Add task zone overlap
-    this.physics.add.overlap(
-      this.player, 
-      this.taskZones, 
-      this.handleTaskZoneOverlap as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, 
-      undefined, 
-      this
-    );
-    
-    // Create message bubble (initially hidden)
-    this.textBubble = this.add.container(this.npc.x, this.npc.y - 50);
-    const bubble = this.add.graphics();
-    bubble.fillStyle(0xffffff, 0.8);
-    bubble.fillRoundedRect(-70, -25, 140, 50, 10);
-    bubble.lineStyle(2, 0x000000, 1);
-    bubble.strokeRoundedRect(-70, -25, 140, 50, 10);
-    
-    const message = this.add.text(-60, -15, `Hey ${gameInstance.gameData.playerName}!\nWelcome to the office!`, { 
-      fontSize: '12px', 
-      color: '#000000' 
-    });
-    
-    this.textBubble.add([bubble, message]);
-    this.textBubble.setAlpha(0); // Initially hidden
-    
-    // Setup keyboard controls
-    const keyboard = this.input.keyboard;
-    this.cursors = keyboard ? keyboard.createCursorKeys() : undefined;
-    
-    // Add spacebar interaction for tasks
-    this.input.keyboard?.on('keydown-SPACE', this.handleTaskInteraction, this);
-    
-    // Camera settings
-    this.cameras.main.setBounds(0, 0, 800, 600);
-    this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
-    this.cameras.main.setZoom(1.2); // Slightly reduce zoom to see more of the environment
-    
-    // Instructions
-    const instructions = this.add.text(10, 10, 'Use arrow keys to move\nApproach the NPC to see a message', {
-      fontSize: '12px',
-      color: '#ffffff',
-      backgroundColor: '#333333',
-      padding: { x: 5, y: 5 }
-    });
-    instructions.setScrollFactor(0); // Fix to camera
-    
-    // Play animations for the player and NPC
-    this.player.play(`${selectedCharacter}-idle`);
-    this.npc.play('npc1-idle');
-  }
-  
-  update() {
-    if (!this.player || !this.npc) return;
-    
-    // Player movement
-    this.movePlayer();
-    
-    // Check distance between player and NPC
-    const distance = Phaser.Math.Distance.Between(
-      this.player.x, this.player.y,
-      this.npc.x, this.npc.y
-    );
-    
-    // Show/hide message bubble based on distance (48 pixels ≈ 1 tile radius)
-    if (distance <= 48 && !this.messageBubbleVisible) {
-      this.showMessageBubble();
-    } else if (distance > 48 && this.messageBubbleVisible) {
-      this.hideMessageBubble();
-    }
-    
-    // Update the position of the text bubble to follow the NPC
-    this.textBubble.setPosition(this.npc.x, this.npc.y - 40);
-    
-    // Show task interaction hint if player is in a task zone
-    this.updateTaskInteractionHint();
-  }
-  
-  private createEnvironment() {
-    // Create a physics group for walls
-    const walls = this.physics.add.staticGroup();
-    
-    // Create outer walls
-    const tileSize = 32;
-    const width = 800 / tileSize;
-    const height = 600 / tileSize;
-    
-    // First, create floor tiles across the entire map
-    for (let x = 0; x < width; x++) {
-      for (let y = 0; y < height; y++) {
-        // Add floor tiles everywhere
-        this.add.image(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 'floor');
-      }
-    }
-
-    // Add a special meeting area
-    const meetingAreaX = 10;
-    const meetingAreaY = 10;
-    const meetingAreaWidth = 5;
-    const meetingAreaHeight = 5;
-
-    // Add a blue carpet-like area for the meeting space (with gem patterns)
-    for (let x = meetingAreaX; x < meetingAreaX + meetingAreaWidth; x++) {
-      for (let y = meetingAreaY; y < meetingAreaY + meetingAreaHeight; y++) {
-        // Create a special blue rectangle for meeting area
-        const carpetRect = this.add.rectangle(
-          x * tileSize + tileSize/2, 
-          y * tileSize + tileSize/2, 
-          tileSize, 
-          tileSize, 
-          0x6688cc, 
-          0.5
-        );
-        
-        // Add a gem in the center of the meeting area
-        if (x === meetingAreaX + Math.floor(meetingAreaWidth/2) && 
-            y === meetingAreaY + Math.floor(meetingAreaHeight/2)) {
-          this.add.image(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 'gem-6').setScale(1.5);
-        }
-      }
-    }
-    
-    // Create border walls
-    for (let x = 0; x < width; x++) {
-      for (let y = 0; y < height; y++) {
-        // Only place walls on the edges
-        if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
-          walls.create(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 'wall');
-        }
-      }
-    }
-    
-    // Create meeting room walls
-    for (let x = 2; x < 10; x++) {
-      for (let y = 2; y < 7; y++) {
-        if (x === 2 || y === 2 || x === 9 || y === 6) {
-          walls.create(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 'wall');
-        } else if (x === 5 && y === 4) {
-          // Add a meeting table
-          this.physics.add.staticImage(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 'table');
-        }
-      }
-    }
-    
-    // Add some desks and chairs
-    for (let x = 12; x < 28; x += 5) {
-      for (let y = 4; y < 17; y += 4) {
-        // Add a gem next to each desk for decoration
-        this.add.image((x+1) * tileSize + tileSize/2, y * tileSize + tileSize/2, 'gem-' + (((x+y) % 6) + 1));
-        
-        // Desk
-        this.physics.add.staticImage(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 'desk');
-        // Chair
-        this.physics.add.staticImage(x * tileSize + tileSize/2, (y + 1) * tileSize + tileSize/2, 'chair');
-      }
-    }
-    
-    // Add more decoration with boxes in corners
-    this.physics.add.staticImage(3 * tileSize, 3 * tileSize, 'box-1');
-    this.physics.add.staticImage((width-3) * tileSize, 3 * tileSize, 'box-2');
-    this.physics.add.staticImage(3 * tileSize, (height-3) * tileSize, 'box-3');
-    this.physics.add.staticImage((width-3) * tileSize, (height-3) * tileSize, 'box-2');
-    
-    return walls;
-  }
-  
-  private createTaskZones(gameInstance: Game) {
-    // Create zones for each task
-    const tileSize = 32;
-    
-    // Task 1: Check email (at a desk)
-    const emailTask = this.add.zone(12 * tileSize + tileSize/2, 4 * tileSize + tileSize/2, 64, 64);
-    emailTask.setData('taskId', '1');
-    this.physics.world.enable(emailTask);
-    this.taskZones.push(emailTask);
-    
-    // Task 2: Attend meeting (in meeting room)
-    const meetingTask = this.add.zone(5 * tileSize + tileSize/2, 4 * tileSize + tileSize/2, 64, 64);
-    meetingTask.setData('taskId', '2');
-    this.physics.world.enable(meetingTask);
-    this.taskZones.push(meetingTask);
-    
-    // Task 3: Meet with colleagues (near NPC)
-    const colleagueTask = this.add.zone(400, 200, 64, 64);
-    colleagueTask.setData('taskId', '3');
-    this.physics.world.enable(colleagueTask);
-    this.taskZones.push(colleagueTask);
-    
-    // Visualize the task zones with markers
-    this.taskZones.forEach(zone => {
-      const taskId = zone.getData('taskId');
-      const task = gameInstance.gameData.tasks.find(t => t.id === taskId);
-      
-      // Add a subtle marker for each task
-      const color = task?.completed ? 0x55aa55 : 0xffff00;
-      const marker = this.add.circle(zone.x, zone.y, 8, color, 0.5);
-      
-      // Add a pulsing effect to active task markers
-      if (!task?.completed) {
-        this.tweens.add({
-          targets: marker,
-          alpha: 0.8,
-          duration: 1000,
-          yoyo: true,
-          repeat: -1
-        });
-      }
-    });
-  }
-  
-  private handleTaskZoneOverlap(player: Phaser.GameObjects.GameObject, zone: Phaser.GameObjects.Zone) {
-    this.activeTaskZone = zone.getData('taskId');
-  }
-  
-  private updateTaskInteractionHint() {
-    // Remove any existing hint
-    const existingHint = this.children.getByName('task-hint');
-    if (existingHint) {
-      existingHint.destroy();
-    }
-    
-    // If player is in a task zone, show a hint
-    if (this.activeTaskZone) {
+    try {
       const gameInstance = this.game as Game;
-      const task = gameInstance.gameData.tasks.find(t => t.id === this.activeTaskZone);
+      console.log('Game instance:', gameInstance);
       
-      if (task && !task.completed) {
-        const hint = this.add.text(
-          this.player.x, 
-          this.player.y - 40, 
-          '[SPACE] to ' + task.text, 
-          {
-            fontSize: '12px',
-            backgroundColor: '#00000080',
-            padding: { x: 5, y: 2 },
-            color: '#ffffff'
-          }
-        ).setOrigin(0.5).setName('task-hint');
-      }
-    }
-    
-    // Reset active zone (will be set again on next overlap if player still in zone)
-    this.activeTaskZone = null;
-  }
-  
-  private handleTaskInteraction() {
-    if (!this.activeTaskZone) return;
-    
-    const gameInstance = this.game as Game;
-    const task = gameInstance.gameData.tasks.find(t => t.id === this.activeTaskZone);
-    
-    if (task && !task.completed) {
-      // Mark task as completed
-      task.completed = true;
+      // Create a simple background
+      this.add.rectangle(400, 300, 800, 600, 0x87CEEB).setDepth(-2);
       
-      // Visual feedback
-      this.cameras.main.flash(500, 0, 255, 0);
+      // Add a grid pattern for visual reference
+      this.createGrid();
       
-      // Play sound (would add sound effect here)
+      // Create player with selected character
+      const selectedCharacter = gameInstance.gameData.selectedCharacter;
+      this.player = this.physics.add.sprite(400, 300, `${selectedCharacter}-idle`);
+      this.player.setCollideWorldBounds(true);
+      this.player.setScale(1.5);
       
-      // Update the UI scene
-      this.scene.get('UIScene').events.emit('updateTasks');
+      // Setup keyboard controls
+      this.cursors = this.input.keyboard?.createCursorKeys();
       
-      // Show completion message
-      const completionText = this.add.text(
+      // Add player name above character
+      this.playerNameText = this.add.text(
         this.player.x, 
-        this.player.y - 60, 
-        'Task completed!', 
-        {
-          fontSize: '16px',
-          fontStyle: 'bold',
-          color: '#55ff55',
-          stroke: '#000000',
-          strokeThickness: 4
-        }
-      ).setOrigin(0.5);
+        this.player.y - 30, 
+        gameInstance.gameData.playerName, 
+        { fontSize: '14px', color: '#ffffff', stroke: '#000000', strokeThickness: 3 }
+      );
+      this.playerNameText.setOrigin(0.5);
       
-      // Animate and remove the completion message
-      this.tweens.add({
-        targets: completionText,
-        y: completionText.y - 50,
-        alpha: 0,
-        duration: 2000,
-        onComplete: () => completionText.destroy()
-      });
+      // Set camera to follow player
+      this.cameras.main.setBounds(0, 0, 800, 600);
+      this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
       
-      // Check if all tasks are completed
-      const allTasksCompleted = gameInstance.gameData.tasks.every(t => t.completed);
-      if (allTasksCompleted) {
-        this.showGameComplete();
+      // Display simple instructions
+      const instructions = this.add.text(10, 10, 
+        'Use arrow keys to move\nApproach players to chat/call', 
+        { fontSize: '14px', color: '#ffffff', backgroundColor: '#000000', padding: { x: 5, y: 5 } }
+      );
+      instructions.setScrollFactor(0);
+      
+      // Start player animation
+      this.player.play(`${selectedCharacter}-idle`);
+      
+      // Join the server with player data
+      if (this.socket) {
+        const playerData = {
+          id: this.socket.id,
+          name: gameInstance.gameData.playerName,
+          position: { x: this.player.x, y: this.player.y },
+          avatar: selectedCharacter
+        };
+        console.log('Joining server with player data:', playerData);
+        this.socket.emit('join', playerData);
       }
+      
+      // Initial UI update
+      this.events.emit('connectionStatus', !!this.socket?.connected);
+      this.updatePlayerCount();
+      
+      // Setup visual indicator for proximity range
+      this.createProximityCircle();
+      
+      console.log('OfficeScene create completed');
+    } catch (error) {
+      console.error('Error in OfficeScene create:', error);
     }
   }
   
-  private showGameComplete() {
-    // Create a completion overlay
-    const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
-    overlay.setDepth(100);
+  update(time: number) {
+    if (!this.player || !this.cursors || !this.socket) return;
     
-    const completionText = this.add.text(
-      400, 
-      250, 
-      'CONGRATULATIONS!\nYou completed all office tasks!', 
-      {
-        fontSize: '32px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-        align: 'center'
-      }
-    ).setOrigin(0.5).setDepth(101);
+    // Track if player moved
+    const prevX = this.player.x;
+    const prevY = this.player.y;
     
-    const continueText = this.add.text(
-      400, 
-      350, 
-      'Press SPACE to continue exploring\nor ESC to return to character selection', 
-      {
-        fontSize: '16px',
-        color: '#ffffff',
-        align: 'center'
-      }
-    ).setOrigin(0.5).setDepth(101);
-    
-    // Add input handlers
-    this.input.keyboard?.once('keydown-SPACE', () => {
-      overlay.destroy();
-      completionText.destroy();
-      continueText.destroy();
-    });
-    
-    this.input.keyboard?.once('keydown-ESC', () => {
-      this.scene.start('CharacterSelectScene');
-    });
-  }
-  
-  private createAnimations() {
-    // Player animations for each character
-    ['character1', 'character2', 'character3'].forEach(character => {
-      this.anims.create({
-        key: `${character}-idle`,
-        frames: this.anims.generateFrameNumbers(`${character}-idle`, { start: 0, end: 3 }),
-        frameRate: 10,
-        repeat: -1
-      });
-      
-      this.anims.create({
-        key: `${character}-walk`,
-        frames: this.anims.generateFrameNumbers(`${character}-run`, { start: 0, end: 5 }),
-        frameRate: 10,
-        repeat: -1
-      });
-    });
-    
-    // NPC animations
-    this.anims.create({
-      key: 'npc1-idle',
-      frames: this.anims.generateFrameNumbers('npc1', { start: 0, end: 3 }),
-      frameRate: 10,
-      repeat: -1
-    });
-    
-    this.anims.create({
-      key: 'npc2-idle',
-      frames: this.anims.generateFrameNumbers('npc2', { start: 0, end: 3 }),
-      frameRate: 10,
-      repeat: -1
-    });
-  }
-  
-  private movePlayer() {
-    // Early return if player or cursors are not defined
-    if (!this.player || !this.cursors) return;
-    
-    // Get the selected character
-    const gameInstance = this.game as Game;
-    const selectedCharacter = gameInstance.gameData.selectedCharacter;
-    
-    // Reset velocity
-    this.player.setVelocity(0);
-    
-    const speed = 140;
+    // Handle player movement
+    const speed = 160; // Increased from 140 for faster movement
     let isMoving = false;
+    let velocityX = 0;
+    let velocityY = 0;
     
     if (this.cursors.left.isDown) {
-      this.player.setVelocityX(-speed);
-      this.player.flipX = true; // Flip sprite when moving left
+      velocityX = -speed;
+      this.player.flipX = true;
       isMoving = true;
     } else if (this.cursors.right.isDown) {
-      this.player.setVelocityX(speed);
-      this.player.flipX = false; // Reset flip when moving right
+      velocityX = speed;
+      this.player.flipX = false;
       isMoving = true;
     }
     
     if (this.cursors.up.isDown) {
-      this.player.setVelocityY(-speed);
+      velocityY = -speed;
       isMoving = true;
     } else if (this.cursors.down.isDown) {
-      this.player.setVelocityY(speed);
+      velocityY = speed;
       isMoving = true;
     }
     
-    // Play appropriate animation
+    // Apply velocity
+    this.player.setVelocity(velocityX, velocityY);
+    
+    // Update player animation
+    const gameInstance = this.game as Game;
+    const selectedCharacter = gameInstance.gameData.selectedCharacter;
+    
     if (isMoving) {
       this.player.play(`${selectedCharacter}-walk`, true);
     } else {
       this.player.play(`${selectedCharacter}-idle`, true);
     }
+    
+    // Update name text position
+    if (this.playerNameText) {
+      this.playerNameText.setPosition(this.player.x, this.player.y - 30);
+    }
+    
+    // Update proximity circle position
+    if (this.proximityCircle) {
+      this.proximityCircle.setPosition(this.player.x, this.player.y);
+    }
+    
+    // Check if player moved enough to send an update (to reduce network traffic)
+    const positionChanged = Math.abs(prevX - this.player.x) > 1 || Math.abs(prevY - this.player.y) > 1;
+    
+    // Send position update to server if player moved
+    if (isMoving && positionChanged) {
+      this.socket.emit('move', { x: this.player.x, y: this.player.y });
+      
+      // Check for nearby players immediately when player moves
+      this.checkNearbyPlayers();
+      this.lastNearbyCheck = time;
+    } 
+    // Check for nearby players periodically even when not moving
+    else if (time > this.lastNearbyCheck + this.nearbyCheckInterval) {
+      this.checkNearbyPlayers();
+      this.lastNearbyCheck = time;
+    }
   }
   
-  private showMessageBubble() {
-    this.messageBubbleVisible = true;
-    this.tweens.add({
-      targets: this.textBubble,
-      alpha: 1,
-      duration: 200,
-      ease: 'Power2'
+  private proximityCircle?: Phaser.GameObjects.Graphics;
+  
+  private createProximityCircle() {
+    if (this.proximityCircle) {
+      this.proximityCircle.destroy();
+    }
+    
+    this.proximityCircle = this.add.graphics();
+    this.proximityCircle.lineStyle(2, 0x00ff00, 0.5); // Make circle more visible
+    this.proximityCircle.strokeCircle(0, 0, this.proximityRadius);
+    this.proximityCircle.setDepth(-1);
+    
+    if (this.player) {
+      this.proximityCircle.setPosition(this.player.x, this.player.y);
+    }
+  }
+  
+  public checkNearbyPlayers() {
+    if (!this.player || !this.socket) {
+      console.warn('Cannot check nearby players: player or socket is null');
+      return;
+    }
+    
+    const nearbyIds: string[] = [];
+    const playerCount = this.otherPlayers.size;
+    
+    console.log(`Checking proximity for ${playerCount} players. Current position: (${this.player.x}, ${this.player.y})`);
+    
+    this.otherPlayers.forEach((otherPlayer, id) => {
+      const distance = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        otherPlayer.x, otherPlayer.y
+      );
+      
+      console.log(`Distance to player ${id}: ${Math.round(distance)} px (threshold: ${this.proximityRadius} px)`);
+      
+      if (distance <= this.proximityRadius) {
+        nearbyIds.push(id);
+        
+        // Highlight players in range (more visible green tint)
+        otherPlayer.setTint(0x00ff00);
+        
+        // Add visual indicator connecting the players
+        this.drawConnectionLine(this.player, otherPlayer);
+      } else {
+        // Remove highlight
+        otherPlayer.clearTint();
+      }
+    });
+    
+    // Log results of proximity check
+    if (nearbyIds.length > 0) {
+      console.log(`Players in proximity: ${nearbyIds.join(', ')}`);
+    } else if (playerCount > 0) {
+      console.log('No players in proximity range');
+    }
+    
+    // Update the list in the React component - Force this to always run
+    if (typeof window !== 'undefined') {
+      if (typeof (window as any).updateNearbyUsers === 'function') {
+        console.log('Sending nearby players to React:', nearbyIds);
+        (window as any).updateNearbyUsers(nearbyIds);
+      } else {
+        console.error('updateNearbyUsers function is not available on window!');
+      }
+    }
+  }
+  
+  // New method to visually show connection between nearby players
+  private drawConnectionLine(player1: Phaser.Physics.Arcade.Sprite, player2: Phaser.Physics.Arcade.Sprite) {
+    const graphics = this.add.graphics({ lineStyle: { width: 1, color: 0x00ff00, alpha: 0.3 } });
+    graphics.lineBetween(player1.x, player1.y, player2.x, player2.y);
+    
+    // Remove the line after a short delay to prevent graphics buildup
+    this.time.delayedCall(250, () => {
+      graphics.destroy();
     });
   }
   
-  private hideMessageBubble() {
-    this.messageBubbleVisible = false;
-    this.tweens.add({
-      targets: this.textBubble,
-      alpha: 0,
-      duration: 200,
-      ease: 'Power2'
-    });
+  private updatePlayerCount() {
+    // Count includes the local player
+    const count = this.otherPlayers.size + 1;
+    this.events.emit('playerCountUpdated', count);
+  }
+  
+  private createGrid() {
+    // Create a grid for visual reference
+    const graphics = this.add.graphics();
+    graphics.lineStyle(1, 0xffffff, 0.2);
+    
+    // Draw horizontal lines
+    for (let y = 0; y < 600; y += 50) {
+      graphics.beginPath();
+      graphics.moveTo(0, y);
+      graphics.lineTo(800, y);
+      graphics.closePath();
+      graphics.strokePath();
+    }
+    
+    // Draw vertical lines
+    for (let x = 0; x < 800; x += 50) {
+      graphics.beginPath();
+      graphics.moveTo(x, 0);
+      graphics.lineTo(x, 600);
+      graphics.closePath();
+      graphics.strokePath();
+    }
+  }
+  
+  private addOtherPlayer(userData: User) {
+    if (this.otherPlayers.has(userData.id)) return;
+    
+    console.log(`Adding player ${userData.id} at position:`, userData.position);
+    
+    // Create the player sprite
+    const otherPlayer = this.physics.add.sprite(
+      userData.position.x, 
+      userData.position.y, 
+      `${userData.avatar || 'character1'}-idle`
+    );
+    otherPlayer.setScale(1.5);
+    
+    // Store player data
+    otherPlayer.setData('userData', userData);
+    
+    // Start playing animation
+    otherPlayer.play(`${userData.avatar || 'character1'}-idle`);
+    
+    // Add name above player
+    const nameText = this.add.text(
+      userData.position.x, 
+      userData.position.y - 30, 
+      userData.name, 
+      { fontSize: '14px', color: '#ffffff', stroke: '#000000', strokeThickness: 3 }
+    );
+    nameText.setOrigin(0.5);
+    
+    // Store the sprite and text in a container for easy management
+    otherPlayer.setData('nameText', nameText);
+    
+    // Store the player
+    this.otherPlayers.set(userData.id, otherPlayer);
+    
+    // Check if the new player is nearby
+    this.checkNearbyPlayers();
+  }
+  
+  private removePlayer(userId: string) {
+    const player = this.otherPlayers.get(userId);
+    if (player) {
+      // Remove the name text
+      const nameText = player.getData('nameText');
+      if (nameText) nameText.destroy();
+      
+      // Remove the player sprite
+      player.destroy();
+      
+      // Remove from our map
+      this.otherPlayers.delete(userId);
+      
+      console.log(`Removed player ${userId}`);
+      
+      // Update nearby players list
+      this.checkNearbyPlayers();
+    }
+  }
+  
+  private updatePlayerPosition(userData: any) {
+    const player = this.otherPlayers.get(userData.id);
+    if (player) {
+      // Update stored position data
+      const storedData = player.getData('userData');
+      player.setData('userData', { ...storedData, position: userData.position });
+      
+      // Update player position
+      this.tweens.add({
+        targets: player,
+        x: userData.position.x,
+        y: userData.position.y,
+        duration: 100,
+        ease: 'Linear',
+        onComplete: () => {
+          // Force proximity check immediately after a player moves
+          this.checkNearbyPlayers();
+        }
+      });
+      
+      // Update name text position
+      const nameText = player.getData('nameText');
+      if (nameText) {
+        this.tweens.add({
+          targets: nameText,
+          x: userData.position.x,
+          y: userData.position.y - 30,
+          duration: 100,
+          ease: 'Linear'
+        });
+      }
+    }
   }
 }
