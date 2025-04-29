@@ -1,51 +1,55 @@
-# Virtual HQ Backend
+# VirtualHQ Backend Server
 
-This is the backend server for the Virtual HQ application, built with Express and Socket.IO.
+A real-time communication server using WebSocket and WebRTC for room-based video/audio chat.
 
 ## Features
 
-- Real-time user position tracking
-- Proximity-based communication
-- User management (join/leave)
-- Chat messaging between users in range
+- Room-based communication
+- WebRTC peer-to-peer connections
+- Real-time signaling using Socket.IO
+- Cross-origin resource sharing (CORS) enabled
+
+## Setup
+
+1. Install dependencies:
+```bash
+npm install
+```
+
+2. Create a `.env` file in the root directory with the following content:
+```
+PORT=3000
+NODE_ENV=development
+```
+
+3. Start the server:
+```bash
+npm start
+```
+
+For development with auto-reload:
+```bash
+npm run dev
+```
 
 ## API Endpoints
 
-- `GET /api/health` - Check server health
-- `GET /api/users` - Get all connected users
-- `GET /api/config` - Get server configuration
+The server runs on `http://localhost:3000` by default.
 
-## Socket.IO Events
+### WebSocket Events
 
-### Client to Server
+- `join-room`: Join a room with a user ID
+- `offer`: Send WebRTC offer
+- `answer`: Send WebRTC answer
+- `ice-candidate`: Send ICE candidate
+- `user-joined`: Notify when a user joins
+- `user-left`: Notify when a user leaves
+- `room-users`: Get list of users in a room
 
-- `join` - User joins the virtual HQ
-- `move` - User moves to a new position
-- `message` - User sends a chat message
+## WebRTC Signaling
 
-### Server to Client
+The server handles WebRTC signaling through Socket.IO events:
 
-- `users` - List of all connected users
-- `user-joined` - New user joined
-- `user-left` - User disconnected
-- `user-moved` - User moved to a new position
-- `message` - Chat message received
-
-## Environment Variables
-
-- `PORT` - Server port (default: 3001)
-- `FRONTEND_URL` - Frontend URL for CORS (default: http://localhost:5173)
-- `COMMUNICATION_RANGE` - Maximum distance for users to communicate (default: 200 pixels)
-
-## Running the Server
-
-```bash
-# Install dependencies
-npm install
-
-# Start server in development mode
-npm run dev
-
-# Start server in production mode
-npm start
-``` 
+1. When a user joins a room, they receive a list of existing users
+2. Users can exchange WebRTC offers, answers, and ICE candidates
+3. The server manages room membership and notifies users of changes 
